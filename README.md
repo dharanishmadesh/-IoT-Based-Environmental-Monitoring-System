@@ -223,5 +223,5 @@ void sendAlert(String message, float temperature) {
 ---
 
 ## License
-This project is licensed under the MIT License. Feel free to modify and use it in your projects.
+This project is licensed under the MIT License. 
 
