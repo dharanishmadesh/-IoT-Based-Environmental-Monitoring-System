@@ -1,0 +1,120 @@
+#include <WiFi.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <HTTPClient.h>
+
+// Replace with your WiFi credentials
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// ThingSpeak API details
+const char* server = "http://api.thingspeak.com/update";
+const char* apiKey = "YOUR_THINGSPEAK_API_KEY";
+
+// DHT sensor settings
+#define DHTPIN 4        // GPIO pin for DHT sensor
+#define DHTTYPE DHT11   // Sensor type
+DHT dht(DHTPIN, DHTTYPE);
+
+// OLED settings
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+void setup() {
+  // Initialize Serial Monitor
+  Serial.begin(115200);
+
+  // Initialize DHT sensor
+  dht.begin();
+
+  // Initialize OLED display
+  if (!display.begin(SSD1306_I2C_ADDRESS, 0x3C)) {
+    Serial.println("SSD1306 allocation failed!");
+    while (1);
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  display.print("Connecting to WiFi");
+  display.display();
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+    display.print(".");
+    display.display();
+  }
+  Serial.println("\nWiFi connected");
+  display.clearDisplay();
+  display.print("WiFi connected");
+  display.display();
+  delay(2000);
+}
+
+void loop() {
+  // Read temperature and humidity
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // Check if any reading failed
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+
+  // Display data on OLED
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Environmental Data:");
+  display.print("Temp: ");
+  display.print(temperature);
+  display.println(" C");
+  display.print("Humidity: ");
+  display.print(humidity);
+  display.println(" %");
+  display.display();
+
+  // Send data to ThingSpeak
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = String(server) + "?api_key=" + apiKey + "&field1=" + String(temperature) + "&field2=" + String(humidity);
+    http.begin(url);
+    int httpResponseCode = http.GET();
+    if (httpResponseCode > 0) {
+      Serial.println("Data sent to ThingSpeak");
+    } else {
+      Serial.println("Error sending data");
+    }
+    http.end();
+  } else {
+    Serial.println("WiFi disconnected");
+  }
+
+  // Trigger email alert using IFTTT (optional)
+  if (temperature > 30.0) { // Threshold temperature
+    sendAlert("High Temperature Alert!", temperature);
+  }
+
+  delay(2000); // Wait for 2 seconds
+}
+
+void sendAlert(String message, float temperature) {
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    String url = "https://maker.ifttt.com/trigger/temperature_alert/with/key/YOUR_IFTTT_KEY?value1=" + String(temperature);
+    http.begin(url);
+    int httpResponseCode = http.GET();
+    if (httpResponseCode > 0) {
+      Serial.println("Alert sent to IFTTT");
+    } else {
+      Serial.println("Failed to send alert");
+    }
+    http.end();
+  }
+}
